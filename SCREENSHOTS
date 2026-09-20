@@ -1,0 +1,8 @@
+Summary Table
+Test	Scenario	                         Tool Used	Status
+1	Order Tracking	Gateway MCP           (order-tracker)	✅ Pass
+2	Refund Processing	Gateway MCP         (refund-processor)	✅ Pass
+3	Knowledge Base RAG	                  Bedrock Knowledge Base Retrieve API	✅ Pass
+4	Long-Term Memory	                    AgentCore Memory MemoryHook	✅ Pass
+5	Discount Calculation	                AgentCore Code Interpreter	✅ Pass
+6	Browser Tool	                        AgentCore Browser	✅ Pass
