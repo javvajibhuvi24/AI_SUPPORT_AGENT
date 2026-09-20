@@ -80,17 +80,17 @@ _bedrock_runtime = boto3.client(
 
 def get_namespaces(mem_client: MemoryClient, memory_id: str) -> Dict:
     """Return a dict mapping strategy type → namespace template string."""
-
-    strategies = mem_client.get_memory_strategies(memory_id)
-
-    namespaces = {}
-
-    for strategy in strategies:
-        strategy_type = strategy["type"]
-        namespace = strategy["namespaces"][0]
-        namespaces[strategy_type] = namespace
-
-    return namespaces
+    try:
+        strategies = mem_client.get_memory_strategies(memory_id)
+        namespaces = {}
+        for strategy in strategies:
+            strategy_type = strategy["type"]
+            namespace = strategy["namespaces"][0]
+            namespaces[strategy_type] = namespace
+        return namespaces
+    except Exception as e:
+        logger.warning("Failed to get memory strategies for %s: %s", memory_id, e)
+        return {}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -292,8 +292,11 @@ def search_knowledge_base(query: str) -> str:
         Relevant information retrieved from the knowledge base.
     """
 
-    if not KB_ID:
-        return "Knowledge base not configured."
+    if not KB_ID or not KB_ID.strip():
+        return (
+            "Knowledge Base is not configured: KB_ID is empty or missing. "
+            "Please configure KB_ID before attempting a knowledge-base search."
+        )
 
     try:
 
@@ -466,13 +469,21 @@ print(json.dumps(result))
     try:
 
         with code_session(REGION) as session:
+            try:
+                result = session.invoke(
+                    "executeCode",
+                    {
+                        "language": "python",
+                        "code": code,
+                        "clearContext": True,
+                    },
+                )
+            except AttributeError:
+                result = session.execute_code(
+                    code=code,
+                    language="python",
+                )
 
-            result = session.execute_code(
-                code=code,
-                language="python",
-            )
-
-        # result may be an EventStream or dict — flatten safely
         output_lines = []
         try:
             for event in result:
@@ -481,7 +492,6 @@ print(json.dumps(result))
                     if text:
                         output_lines.append(text.strip())
         except TypeError:
-            # result is already a plain dict/str
             output_lines = [str(result)]
 
         return "\n".join(output_lines) if output_lines else json.dumps({"status": "ok"})
@@ -591,11 +601,21 @@ async def invoke(
             )
         )
 
-        gateway_tools = await gateway_client.load_tools()
-
-        tools.extend(
-            gateway_tools
-        )
+        try:
+            gateway_tools = await gateway_client.load_tools()
+            tools.extend(gateway_tools)
+            logger.info(
+                "Gateway connected successfully. Loaded %d tools.",
+                len(gateway_tools),
+            )
+        except TimeoutError:
+            logger.exception("Gateway tool loading timed out")
+        except ConnectionError:
+            logger.exception("Gateway connection failed")
+        except Exception as exc:
+            logger.exception(
+                "Gateway tool loading failed: %s", exc
+            )
 
         system_prompt = """
 You are a helpful customer support AI agent.
